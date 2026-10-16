@@ -55,6 +55,23 @@ jobs:
       - name: Apply patch
         run: ./patch.sh
 
+      - name: Drop sources missing in this AOSP version
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          pattern = re.compile(r'^\s*\$\{SRC\}/(\S+\.(?:c|cc|cpp|S|asm))\s*$')
+          for cmake_file in sorted(pathlib.Path("cmake").glob("*.cmake")):
+              kept = []
+              for line in cmake_file.read_text().splitlines(keepends=True):
+                  match = pattern.match(line)
+                  if match and not os.path.isfile("submodules/" + match.group(1)):
+                      print(f"REMOVED from {cmake_file.name}: {match.group(1)}")
+                      continue
+                  kept.append(line)
+              cmake_file.write_text("".join(kept))
+          print("Selesai memeriksa file sumber.")
+          PY
+
       - name: Build
         env:
           ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
