@@ -1,19 +1,20 @@
-name: Release
+name: Build AAPT2 (Android 17 / API 37)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - dev
+    inputs:
+      aosp_tag:
+        description: "Tag AOSP untuk semua submodule"
+        default: "android-17.0.0_r1"
+        required: true
 
 jobs:
   build:
-    name: Build
+    name: Build ${{ matrix.target_arch }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target_arch: [x86_64, x86, arm64-v8a, armeabi-v7a]
+        target_arch: [arm64-v8a, armeabi-v7a, x86_64, x86]
       fail-fast: false
     steps:
       - name: Checkout
@@ -28,6 +29,24 @@ jobs:
           ndk-version: r27c
           add-to-path: false
 
+      - name: Bump submodules to AOSP tag
+        env:
+          TAG: ${{ inputs.aosp_tag }}
+        run: |
+          set -uo pipefail
+          for dir in submodules/*/; do
+            name=$(basename "$dir")
+            if git -C "$dir" fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null; then
+              git -C "$dir" checkout -q "tags/$TAG"
+              echo "OK    $name -> $TAG"
+            else
+              echo "MISS  $name (tag $TAG tidak ada, tetap di commit lama)"
+            fi
+          done
+          sed -i 's/PLATFORM_TOOLS_VERSION ".*"/PLATFORM_TOOLS_VERSION "37.0.0"/' misc/platform_tools_version.h
+          echo "--- Versi protoc yang diminta protobuf submodule (workflow memakai 21.12):"
+          grep PROTOC_VERSION submodules/protobuf/protobuf_version.bzl || echo "(tidak ditemukan)"
+
       - name: Get protoc
         run: |
           wget https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-linux-x86_64.zip
@@ -41,57 +60,11 @@ jobs:
           ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: bash ./build.sh ${{ matrix.target_arch }}
 
+      - name: Show checksum
+        run: sha256sum build/bin/aapt2-*
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: aapt2-${{ matrix.target_arch }}
-          path: ${{ github.workspace }}/build/bin/aapt2-*
-          archive: false
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
-      attestations: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Make sure the release step uses its own credentials:
-          # https://github.com/cycjimmy/semantic-release-action#private-packages
-          persist-credentials: false
-
-      - name: Download all built artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ${{ github.workspace }}/build/bin/
-          merge-multiple: true
-
-      - name: Generate attestations
-        if: ${{ steps.release.outputs.release_created }}
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: ${{ github.workspace }}/build/bin/aapt2-*
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          fingerprint: ${{ vars.GPG_FINGERPRINT }}
-
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm exec semantic-release
+          path: build/bin/aapt2-*
