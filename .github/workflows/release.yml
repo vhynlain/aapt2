@@ -19,8 +19,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: 'true'
 
       - name: Setup NDK
         uses: nttld/setup-ndk@v1
@@ -29,20 +27,27 @@ jobs:
           ndk-version: r27c
           add-to-path: false
 
-      - name: Bump submodules to AOSP tag
+      - name: Fetch submodules at AOSP tag (with retry)
         env:
           TAG: ${{ inputs.aosp_tag }}
         run: |
           set -uo pipefail
-          for dir in submodules/*/; do
-            name=$(basename "$dir")
-            if git -C "$dir" fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null; then
-              git -C "$dir" checkout -q "tags/$TAG"
-              echo "OK    $name -> $TAG"
+          while read -r key path; do
+            url=$(git config -f .gitmodules --get "${key%.path}.url")
+            ok=0
+            for attempt in 1 2 3 4; do
+              rm -rf "$path"
+              if git clone --depth 1 --branch "$TAG" "$url" "$path"; then ok=1; break; fi
+              echo "Percobaan $attempt gagal untuk $path, coba lagi..."
+              sleep $((attempt * 20))
+            done
+            if [ "$ok" = 1 ]; then
+              echo "OK    $path -> $TAG"
             else
-              echo "MISS  $name (tag $TAG tidak ada, tetap di commit lama)"
+              echo "FAIL  $path (tag $TAG tidak bisa diambil)"
+              exit 1
             fi
-          done
+          done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
           sed -i 's/PLATFORM_TOOLS_VERSION ".*"/PLATFORM_TOOLS_VERSION "37.0.0"/' misc/platform_tools_version.h
           echo "--- Versi protoc yang diminta protobuf submodule (workflow memakai 21.12):"
           grep PROTOC_VERSION submodules/protobuf/protobuf_version.bzl || echo "(tidak ditemukan)"
