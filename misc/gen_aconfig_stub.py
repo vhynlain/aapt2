@@ -5,7 +5,8 @@ Di AOSP header ini dihasilkan oleh `aconfig` dari file *.aconfig. Build CMake ti
 aconfig, jadi header dibuat sendiri:
   1. cari semua file *.aconfig di submodules/base  -> paket + nama flag
   2. cari #include "<paket_dengan_underscore>.h" di sumber androidfw & aapt2
-  3. untuk tiap header yang dipakai, tulis fungsi inline per flag di namespace paketnya
+  3. untuk tiap header yang dipakai, tulis fungsi inline per flag: di namespace paketnya
+     (a::b::flag()) dan gaya global (a_b_flag()), keduanya dipakai kode AOSP
 
 Semua flag diset NONAKTIF (false). Untuk mengaktifkan flag tertentu, taruh namanya
 (satu per baris, tanpa paket) di misc/aconfig_enabled.txt lalu jalankan ulang skrip.
@@ -81,7 +82,13 @@ def main():
         for n in flags:
             val = "true" if n in enabled else "false"
             lines.append(f"inline constexpr bool {n}() {{ return {val}; }}")
-        lines += ["", "inline void reset_flags() {}", "", f"}}  // namespace {ns}", "#endif", ""]
+        lines += ["", "inline void reset_flags() {}", "", f"}}  // namespace {ns}", ""]
+        # gaya C/global yang dipakai androidfw: android_content_res_<flag>()
+        prefix = pkg.replace(".", "_")
+        for n in flags:
+            val = "true" if n in enabled else "false"
+            lines.append(f"inline bool {prefix}_{n}() {{ return {val}; }}")
+        lines += ["#endif", ""]
         (OUT / hdr).write_text("\n".join(lines))
         print(f"OK    {hdr}: {len(flags)} flag, namespace {ns}")
 
