@@ -27,5 +27,8 @@ sed -i "$ressourcesPattern" "submodules/base/tools/aapt2/ResourcesInternal.proto
 # skrip yang mencocokkan hunk berdasarkan isi kode, bukan nomor baris.
 python3 patches/apply_patch.py || exit 1
 
+# Header flag aconfig (android_content_res.h, dll) tidak ada di build CMake, dibuat stub-nya.
+python3 misc/gen_aconfig_stub.py || exit 1
+
 mkdir -p "submodules/boringssl/src/third_party"
 ln -sfn "$(pwd)/submodules/googletest" "submodules/boringssl/src/third_party/googletest"

@@ -50,5 +50,16 @@ endif()
 add_subdirectory(submodules/protobuf EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/googletest EXCLUDE_FROM_ALL)
 
+# Opsi compiler khusus kode AOSP (library pihak ketiga di atas tidak ikut terpengaruh).
+#  - __ANDROID_API__=10000 (__ANDROID_API_FUTURE__) seperti build platform, supaya API baru
+#    Android 17 di header liblog dkk tidak ditolak ("unavailable: introduced in Android 37").
+#  - bionic_compat.h: deklarasi fungsi property yang tidak ada di header publik NDK r27.
+#  - -Wno-invalid-constexpr: LocaleDataLookup.h memakai reinterpret_cast di constexpr.
+add_compile_options(
+    "$<$<COMPILE_LANGUAGE:C,CXX>:-U__ANDROID_API__>"
+    "$<$<COMPILE_LANGUAGE:C,CXX>:-D__ANDROID_API__=10000>"
+    "$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-include ${PROJECT_SOURCE_DIR}/misc/bionic_compat.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-constexpr>")
+
 # building sdk-tools
 add_subdirectory(cmake)

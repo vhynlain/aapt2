@@ -52,10 +52,19 @@ cmake -GNinja \
 # Build the binary
 # -k 0 = jangan berhenti di error pertama, supaya semua error muncul dalam satu log.
 # Set NINJA_STOP_ON_ERROR=1 untuk berhenti di error pertama seperti biasa.
-if [[ "${NINJA_STOP_ON_ERROR:-0}" == "1" ]]; then
-    ninja -C build aapt2
-else
-    ninja -C build -k 0 aapt2
+NINJA_FLAGS="-k 0"
+[[ "${NINJA_STOP_ON_ERROR:-0}" == "1" ]] && NINJA_FLAGS=""
+
+ninja -C build $NINJA_FLAGS aapt2 2>&1 | tee build.log
+status=${PIPESTATUS[0]}
+
+if [[ $status -ne 0 ]]; then
+    echo
+    echo "================ RINGKASAN ERROR (screenshot bagian ini) ================"
+    grep -E "error:|undefined (reference|symbol)|No such file" build.log \
+        | grep -v "Werror" | sed 's/\x1b\[[0-9;]*m//g' | sort -u | head -30 | cut -c1-300
+    echo "========================================================================="
+    exit $status
 fi
 
 # Remove debug symbol
