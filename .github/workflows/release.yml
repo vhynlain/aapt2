@@ -42,6 +42,9 @@ jobs:
               sleep $((attempt * 20))
             done
             if [ "$ok" = 1 ]; then
+              # .git dihapus: tidak dibutuhkan lagi, dan mencegah warning
+              # "No url found for submodule path 'submodules/pcre/deps/sljit'" saat cleanup checkout.
+              rm -rf "$path/.git"
               echo "OK    $path -> $TAG"
             else
               echo "FAIL  $path (tag $TAG tidak bisa diambil)"
@@ -49,13 +52,21 @@ jobs:
             fi
           done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
           sed -i 's/PLATFORM_TOOLS_VERSION ".*"/PLATFORM_TOOLS_VERSION "37.0.0"/' misc/platform_tools_version.h
-          echo "--- Versi protoc yang diminta protobuf submodule (workflow memakai 21.12):"
-          grep PROTOC_VERSION submodules/protobuf/protobuf_version.bzl || echo "(tidak ditemukan)"
 
-      - name: Get protoc
+      # protoc HARUS sama dengan versi runtime protobuf di submodule. Android 17 memakai
+      # protobuf 33.x; protoc 21.12 menghasilkan kode .pb.cc yang tidak cocok.
+      - name: Get protoc (versi mengikuti submodule protobuf)
         run: |
-          wget https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protoc-21.12-linux-x86_64.zip
-          sudo unzip -j protoc-*.zip bin/protoc -d /usr/local/bin/
+          set -euo pipefail
+          PROTOC_VERSION=$(sed -n 's/^PROTOC_VERSION *= *"\(.*\)".*/\1/p' submodules/protobuf/protobuf_version.bzl | head -n1)
+          if [ -z "$PROTOC_VERSION" ]; then
+            echo "PROTOC_VERSION tidak ditemukan di protobuf_version.bzl"; exit 1
+          fi
+          echo "protoc yang dibutuhkan: $PROTOC_VERSION"
+          wget -q "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" -O protoc.zip
+          sudo unzip -o -j protoc.zip bin/protoc -d /usr/local/bin/
+          sudo chmod +x /usr/local/bin/protoc
+          protoc --version
 
       - name: Apply patch
         run: ./patch.sh
@@ -65,16 +76,29 @@ jobs:
           python3 - <<'PY'
           import os, pathlib, re
           pattern = re.compile(r'^\s*\$\{SRC\}/(\S+\.(?:c|cc|cpp|S|asm))\s*$')
+          listed = set()
           for cmake_file in sorted(pathlib.Path("cmake").glob("*.cmake")):
               kept = []
               for line in cmake_file.read_text().splitlines(keepends=True):
                   match = pattern.match(line)
-                  if match and not os.path.isfile("submodules/" + match.group(1)):
-                      print(f"REMOVED from {cmake_file.name}: {match.group(1)}")
-                      continue
+                  if match:
+                      listed.add(match.group(1))
+                      if not os.path.isfile("submodules/" + match.group(1)):
+                          print(f"REMOVED from {cmake_file.name}: {match.group(1)}")
+                          continue
                   kept.append(line)
               cmake_file.write_text("".join(kept))
           print("Selesai memeriksa file sumber.")
+
+          # Diagnostik: file sumber baru di Android 17 yang belum ada di cmake/*.cmake.
+          # Kalau nanti muncul "undefined reference" saat link, cek daftar ini.
+          skip = re.compile(r'(_test|_benchmark|test|benchmark|fuzz|example)', re.I)
+          for d in ("base/libs/androidfw", "base/tools/aapt2"):
+              root = pathlib.Path("submodules") / d
+              for f in sorted(root.rglob("*.cpp")):
+                  rel = f.relative_to("submodules").as_posix()
+                  if rel not in listed and not skip.search(rel):
+                      print(f"NOTE  tidak ada di cmake: {rel}")
           PY
 
       - name: Build
