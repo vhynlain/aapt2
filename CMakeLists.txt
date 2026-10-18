@@ -51,15 +51,23 @@ add_subdirectory(submodules/protobuf EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/googletest EXCLUDE_FROM_ALL)
 
 # Opsi compiler khusus kode AOSP (library pihak ketiga di atas tidak ikut terpengaruh).
-#  - __ANDROID_API__=10000 (__ANDROID_API_FUTURE__) seperti build platform, supaya API baru
-#    Android 17 di header liblog dkk tidak ditolak ("unavailable: introduced in Android 37").
-#  - bionic_compat.h: deklarasi fungsi property yang tidak ada di header publik NDK r27.
+#  - __ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__: API baru Android 17 di header liblog dll
+#    ("unavailable: introduced in Android 37") jadi peringatan, bukan error.
 #  - -Wno-invalid-constexpr: LocaleDataLookup.h memakai reinterpret_cast di constexpr.
 add_compile_options(
-    "$<$<COMPILE_LANGUAGE:C,CXX>:-U__ANDROID_API__>"
-    "$<$<COMPILE_LANGUAGE:C,CXX>:-D__ANDROID_API__=10000>"
-    "$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-include ${PROJECT_SOURCE_DIR}/misc/bionic_compat.h>"
+    "$<$<COMPILE_LANGUAGE:C,CXX>:-D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__>"
     "$<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-constexpr>")
 
 # building sdk-tools
 add_subdirectory(cmake)
+
+# bionic_compat.h (deklarasi fungsi property yang tidak ada di header publik NDK r27)
+# hanya di-include paksa ke 4 file ini. Jangan global: include paksa membuat <sys/cdefs.h>
+# terbaca sebelum file seperti libbase/posix_strerror_r.cpp sempat #undef _GNU_SOURCE.
+set_source_files_properties(
+    ${SRC}/libbase/properties.cpp
+    ${SRC}/logging/liblog/properties.cpp
+    ${SRC}/core/libcutils/trace-dev.cpp
+    ${SRC}/selinux/libselinux/src/android/android_device.c
+    TARGET_DIRECTORY libbase liblog libcutils libselinux
+    PROPERTIES COMPILE_OPTIONS "-include;${PROJECT_SOURCE_DIR}/misc/bionic_compat.h")
