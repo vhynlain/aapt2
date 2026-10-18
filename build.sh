@@ -50,7 +50,13 @@ cmake -GNinja \
   -DZLIB_USE_STATIC_LIBS=ON
 
 # Build the binary
-ninja -C build aapt2
+# -k 0 = jangan berhenti di error pertama, supaya semua error muncul dalam satu log.
+# Set NINJA_STOP_ON_ERROR=1 untuk berhenti di error pertama seperti biasa.
+if [[ "${NINJA_STOP_ON_ERROR:-0}" == "1" ]]; then
+    ninja -C build aapt2
+else
+    ninja -C build -k 0 aapt2
+fi
 
 # Remove debug symbol
 "$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded  "build/bin/aapt2-$architecture"

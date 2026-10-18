@@ -20,11 +20,15 @@ set(CMAKE_EXE_LINKER_FLAGS "-static")
 
 # platform tools version
 # see the misc/platform_tools_version.h
-set(TOOLS_VERSION 35.0.2)
+set(TOOLS_VERSION 37.0.0)
 set(SRC ${PROJECT_SOURCE_DIR}/submodules)
 
 # 64-bit off_t for lseek.
 add_definitions(-D_FILE_OFFSET_BITS=64)
+
+# expat (Android 17) menolak dikompilasi bila tidak ada sumber entropi yang
+# terdeteksi (error di xmlparse.c:149). Paksa pakai /dev/urandom, tersedia di Android.
+add_definitions(-DXML_DEV_URANDOM)
 
 # protoc options
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -39,6 +43,10 @@ add_subdirectory(submodules/pcre EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/libpng EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/jsoncpp EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/expat/expat EXCLUDE_FROM_ALL)
+# patches/protobuf.patch lama menambahkan folder android/ ke include path protobuf
+if(EXISTS ${PROJECT_SOURCE_DIR}/submodules/protobuf/android)
+    include_directories(${PROJECT_SOURCE_DIR}/submodules/protobuf/android)
+endif()
 add_subdirectory(submodules/protobuf EXCLUDE_FROM_ALL)
 add_subdirectory(submodules/googletest EXCLUDE_FROM_ALL)
 
