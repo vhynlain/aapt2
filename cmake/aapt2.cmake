@@ -75,6 +75,14 @@ set(INCLUDES
     ${SRC}/incremental_delivery/incfs/kernel-headers
     )
 
+# protobuf 33.x: parse_context.h meng-include "utf8_validity.h" dari third_party/utf8_range.
+file(GLOB_RECURSE _utf8_validity_h "${SRC}/protobuf/*utf8_validity.h")
+foreach(_h ${_utf8_validity_h})
+    get_filename_component(_d ${_h} DIRECTORY)
+    list(APPEND INCLUDES ${_d})
+endforeach()
+list(REMOVE_DUPLICATES INCLUDES)
+
 set(TOOL_SOURCE
     ${SRC}/base/tools/aapt2/cmd/ApkInfo.cpp
     ${SRC}/base/tools/aapt2/cmd/Command.cpp
