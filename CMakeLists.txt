@@ -71,3 +71,10 @@ set_source_files_properties(
     ${SRC}/selinux/libselinux/src/android/android_device.c
     TARGET_DIRECTORY libbase liblog libcutils libselinux
     PROPERTIES COMPILE_OPTIONS "-include;${PROJECT_SOURCE_DIR}/misc/bionic_compat.h")
+
+# abseil (FetchContent, dipakai protobuf 33.x) menambahkan "-llog" untuk Android. Link kita
+# `-static` dan NDK hanya punya liblog.so, jadi -llog gagal ("unable to find library -llog").
+# Solusi: liblog AOSP yang sudah ikut dibuild dinamai liblog.a dan folder lib/ didaftarkan
+# sebagai search path link, sehingga -llog memakai liblog tersebut.
+set_target_properties(liblog PROPERTIES OUTPUT_NAME log)
+target_link_directories(aapt2 PRIVATE ${CMAKE_BINARY_DIR}/lib)
